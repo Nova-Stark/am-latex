@@ -7,5 +7,6 @@ requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.120.1",
     "pix2tex[api]>=0.1.4",
+    "pyzmq>=27.1.0",
     "uvicorn>=0.38.0",
 ]
