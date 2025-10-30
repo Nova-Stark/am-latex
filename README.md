@@ -1,0 +1,1 @@
+This software is tightly developed for Linux Systems.

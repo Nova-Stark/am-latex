@@ -39,9 +39,15 @@ async def upload_image(request:Request , file: UploadFile = File(...)):
             }
         
         push_socket :zmq.Socket= request.app.state.zmq_socket
+        result_socket:zmq.Socket = request.app.state.r_store
         
         await push_socket.send_json(payload)#type:ignore
-
+        await result_socket.send_json({
+            "id":img_uid,
+            "status":"pending"
+        }) #type:ignore
+        
+        
         return {
             "s":"ok",
             "id":img_uid

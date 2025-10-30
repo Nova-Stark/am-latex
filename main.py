@@ -13,9 +13,13 @@ async def lifespan(app: FastAPI):
     
     push_socket = context.socket(zmq.PUSH)
     push_socket.bind("tcp://*:5555")
+    result_store = context.socket(zmq.PUSH)
+    result_store.bind("ipc://result_store")
+    
     
     app.state.zmq_socket = push_socket
     print("ZMQ PUSH socket bound to tcp://*:5555")
+    app.state.r_store = result_store
     
     yield  
     
