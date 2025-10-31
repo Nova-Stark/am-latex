@@ -536,6 +536,7 @@ source = { virtual = "." }
 dependencies = [
     { name = "fastapi" },
     { name = "pix2tex", extra = ["api"] },
+    { name = "python-dotenv" },
     { name = "pyzmq" },
     { name = "redis", extra = ["hiredis"] },
     { name = "uvicorn" },
@@ -545,6 +546,7 @@ dependencies = [
 requires-dist = [
     { name = "fastapi", specifier = ">=0.120.1" },
     { name = "pix2tex", extras = ["api"], specifier = ">=0.1.4" },
+    { name = "python-dotenv", specifier = ">=1.2.1" },
     { name = "pyzmq", specifier = ">=27.1.0" },
     { name = "redis", extras = ["hiredis"], specifier = ">=7.0.1" },
     { name = "uvicorn", specifier = ">=0.38.0" },

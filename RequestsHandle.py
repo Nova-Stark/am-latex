@@ -45,7 +45,7 @@ async def upload_image(request:Request , file: UploadFile = File(...)):
         
         await push_socket.send_json(payload)#type:ignore
         try:
-            await r_con.set(payload["id"],"pending")
+            await r_con.set(payload["id"],"Pending: ")
         except redis.exceptions.ConnectionError:
             print("[ERROR] Redis connection Error!")
         
