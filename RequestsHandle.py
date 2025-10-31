@@ -70,7 +70,7 @@ async def get_result(img_uid:str ,request:Request):
             #here i think we can add a mechanism for stopping ddos attack!
             raise HTTPException(status_code=404, detail="Invalid Img_UID!")
         
-        code = str(result).split(":")[0]
+        code = str(result).split(":",1)[0]
         
         match code:
             case "Pending":
