@@ -56,3 +56,36 @@ async def upload_image(request:Request , file: UploadFile = File(...)):
     except Exception as e:
         print(f"[ERROR] processing image upload: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to process image: {e}")
+
+@image_router.get("/result/{img_uid}",summary="Get reult.")
+async def get_result(img_uid:str ,request:Request):
+    """
+    Hanlde polling and getting back result.!
+    """
+    try:
+        r_con :redis.Redis = request.app.redis_connection
+        
+        result = await r_con.get(img_uid)
+        if result is None:
+            #here i think we can add a mechanism for stopping ddos attack!
+            raise HTTPException(status_code=404, detail="Invalid Img_UID!")
+        
+        code = str(result).split(":")[0]
+        
+        match code:
+            case "Pending":
+                return {"status":"pending"}
+            case "Result":
+                return {"status":"done","result":code[-1]}
+            case "Error":
+                return {"status":"error","e":code[-1]}
+            case _:
+                return {"status":"unknown"}
+            
+    except redis.exceptions.ConnectionError as e:
+        print("[ERROR] Redis connection error:",e)
+        raise HTTPException(status_code=500, detail="Redis connection error")
+    except Exception as e:
+        print("[ERROR] Something unexpected went wrong!:",e)
+        raise HTTPException(status_code=500, detail="Internal Server error")
+    
