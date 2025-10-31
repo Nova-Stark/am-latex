@@ -76,8 +76,10 @@ async def get_result(img_uid:str ,request:Request):
             case "Pending":
                 return {"status":"pending"}
             case "Result":
+                await r_con.delete(img_uid)
                 return {"status":"done","result":code[-1]}
             case "Error":
+                await r_con.delete(img_uid)
                 return {"status":"error","e":code[-1]}
             case _:
                 return {"status":"unknown"}
