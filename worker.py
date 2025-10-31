@@ -46,10 +46,6 @@ def worker():
                 redis_con.set(img_uid,f"Result:{str(result)}")
             except Exception as ex:
                 redis_con.set(img_uid,f"Error:{ex}")
-            finally:
-                continue
-            
-                
             
                  
         except Exception as e:
