@@ -3,6 +3,8 @@ import zmq.asyncio
 from fastapi import FastAPI
 from contextlib import asynccontextmanager
 from RequestsHandle import image_router  
+import redis.asyncio as redis 
+import redis.exceptions 
 
 context = zmq.asyncio.Context()
 
@@ -13,13 +15,17 @@ async def lifespan(app: FastAPI):
     
     push_socket = context.socket(zmq.PUSH)
     push_socket.bind("tcp://*:5555")
-    result_store = context.socket(zmq.PUSH)
-    result_store.bind("ipc://result_store")
     
-    
+    try:
+        redis_con = redis.Redis(decode_responses=True)
+        
+        redis_con.ping()
+    except redis.exceptions.ConnectionError:
+        print("[ERROR] Cant Connect to Redis server!")
+        exit()
     app.state.zmq_socket = push_socket
     print("ZMQ PUSH socket bound to tcp://*:5555")
-    app.state.r_store = result_store
+    app.state.redis_connection = redis_con
     
     yield  
     

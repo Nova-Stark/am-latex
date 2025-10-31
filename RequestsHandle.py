@@ -4,6 +4,8 @@ from PIL import Image
 from secrets import token_urlsafe
 import base64
 import zmq 
+import redis.asyncio as redis
+import redis.exceptions
 
 image_router = APIRouter()
 
@@ -39,14 +41,13 @@ async def upload_image(request:Request , file: UploadFile = File(...)):
             }
         
         push_socket :zmq.Socket= request.app.state.zmq_socket
-        result_socket:zmq.Socket = request.app.state.r_store
+        r_con :redis.Redis = request.app.redis_connection
         
         await push_socket.send_json(payload)#type:ignore
-        await result_socket.send_json({
-            "id":img_uid,
-            "status":"pending"
-        }) #type:ignore
-        
+        try:
+            await r_con.set(payload["id"],"pending")
+        except redis.exceptions.ConnectionError:
+            print("[ERROR] Redis connection Error!")
         
         return {
             "s":"ok",
