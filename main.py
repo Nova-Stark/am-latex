@@ -9,6 +9,7 @@ from worker import runworker,Process
 import uvicorn
 import os 
 from dotenv import load_dotenv
+from fastapi.middleware.cors import CORSMiddleware
 load_dotenv()
 
 context = zmq.asyncio.Context()
@@ -21,7 +22,7 @@ async def lifespan(app: FastAPI):
     print("FastAPI starting up...")
     
     push_socket = context.socket(zmq.PUSH)
-    push_socket.bind("tcp://*:5555")
+    push_socket.bind("tcp://127.0.0.1:5555")
     
     try:
         redis_con = aredis.Redis(decode_responses=True)
@@ -42,6 +43,24 @@ async def lifespan(app: FastAPI):
     print("ZMQ socket and FastAPI closed.")
 
 app = FastAPI(lifespan=lifespan)
+
+
+origins = [
+    "http://127.0.0.1:5500",  
+    "http://localhost:5500",
+    "null",
+    "http://127.0.0.1:5000",
+    "http://172.24.160.1:5000",
+    "http://172.24.160.1:5500" 
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],  
+    allow_headers=["*"],  
+)
 
 app.include_router(image_router, prefix="/images")
 
