@@ -3,12 +3,17 @@ import zmq.asyncio
 from fastapi import FastAPI
 from contextlib import asynccontextmanager
 from RequestsHandle import image_router  
-import redis.asyncio as redis 
+import redis.asyncio as aredis 
 import redis.exceptions 
 from worker import runworker,Process
 import uvicorn
+import os 
+from dotenv import load_dotenv
+load_dotenv()
 
 context = zmq.asyncio.Context()
+
+INFO = bool(os.getenv("INFO"))
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -19,9 +24,9 @@ async def lifespan(app: FastAPI):
     push_socket.bind("tcp://*:5555")
     
     try:
-        redis_con = redis.Redis(decode_responses=True)
+        redis_con = aredis.Redis(decode_responses=True)
         
-        redis_con.ping()
+        await redis_con.ping()#type:ignore
     except redis.exceptions.ConnectionError:
         print("[ERROR] Cant Connect to Redis server!")
         exit()
@@ -42,6 +47,8 @@ app.include_router(image_router, prefix="/images")
 
 @app.get("/")
 async def root():
+    if INFO:
+        print("[INFO] root initiated!")
     return {"message": "Image PUSH server is running. POST images to /images/uploadfile/"}
 
 
@@ -55,7 +62,7 @@ if __name__=="__main__":
         
         uvicorn.run(
             "main:app",
-            host="127.0.0.1",
+            host="0.0.0.0",
             port=8000,
             log_level="info",
             reload=False 

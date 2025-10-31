@@ -5,14 +5,14 @@ from pix2tex.cli import LatexOCR
 import io 
 import base64
 import zmq 
-import redis 
+import redis as sredis
 import redis.exceptions
 from multiprocessing import Process
 
 load_dotenv()
 
 NUM_WORKERS = int(os.getenv("NUM_WORKERS"))#type:ignore
-
+INFO = bool(os.getenv("INFO"))
 
 def worker():
     
@@ -21,8 +21,10 @@ def worker():
     socket = context.socket(zmq.PULL)
     socket.connect("tcp://localhost:5555")
     model = LatexOCR()
+    if INFO:
+        print("[INFO] Worker started!")
     try:
-        redis_con = redis.Redis(decode_responses=True)
+        redis_con = sredis.Redis(decode_responses=True)
         
         redis_con.ping()
     except redis.exceptions.ConnectionError:
@@ -34,7 +36,9 @@ def worker():
             
             task :dict = socket.recv_json()#type:ignore
             img_uid = task["id"]
-            
+            if INFO:
+                print(f"[INFO] Client Image {img_uid} procesing!")
+                
             img_b64_string = task["data"]
             try:
                 img_bytes = base64.b64decode(img_b64_string)
@@ -44,6 +48,8 @@ def worker():
                 img_stream.close()
                 
                 redis_con.set(img_uid,f"Result:{str(result)}")
+                if INFO:
+                    print(f"[INFO] Client Image {img_uid} procesing finished!: {result}")
             except Exception as ex:
                 redis_con.set(img_uid,f"Error:{ex}")
             

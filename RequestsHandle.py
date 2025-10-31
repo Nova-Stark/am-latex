@@ -4,11 +4,14 @@ from PIL import Image
 from secrets import token_urlsafe
 import base64
 import zmq 
-import redis.asyncio as redis
+import redis.asyncio as aredis
 import redis.exceptions
+from dotenv import load_dotenv
+import os
+load_dotenv()
 
 image_router = APIRouter()
-
+INFO = bool(os.getenv("INFO"))
 
 @image_router.post("/uploadfile/", summary="Upload an image file")
 async def upload_image(request:Request , file: UploadFile = File(...)):
@@ -41,14 +44,15 @@ async def upload_image(request:Request , file: UploadFile = File(...)):
             }
         
         push_socket :zmq.Socket= request.app.state.zmq_socket
-        r_con :redis.Redis = request.app.redis_connection
+        r_con :aredis.Redis = request.app.state.redis_connection
         
         await push_socket.send_json(payload)#type:ignore
         try:
             await r_con.set(payload["id"],"Pending: ")
         except redis.exceptions.ConnectionError:
             print("[ERROR] Redis connection Error!")
-        
+        if INFO:
+            print(f"[INFO] Posted for {img_uid}")
         return {
             "s":"ok",
             "id":img_uid
@@ -63,16 +67,18 @@ async def get_result(img_uid:str ,request:Request):
     Hanlde polling and getting back result.!
     """
     try:
-        r_con :redis.Redis = request.app.redis_connection
+        r_con :aredis.Redis = request.app.state.redis_connection
         
         result = await r_con.get(img_uid)
         if result is None:
             #here i think we can add a mechanism for stopping ddos attack!
             raise HTTPException(status_code=404, detail="Invalid Img_UID!")
         
-        code = str(result).split(":",1)[0]
+        code = str(result).split(":",1)
         
-        match code:
+        if INFO:
+            print(f"[INFO] Got for {img_uid}")
+        match code[0]:
             case "Pending":
                 return {"status":"pending"}
             case "Result":
