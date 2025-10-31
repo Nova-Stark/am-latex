@@ -5,6 +5,8 @@ from contextlib import asynccontextmanager
 from RequestsHandle import image_router  
 import redis.asyncio as redis 
 import redis.exceptions 
+from worker import runworker,Process
+import uvicorn
 
 context = zmq.asyncio.Context()
 
@@ -41,3 +43,30 @@ app.include_router(image_router, prefix="/images")
 @app.get("/")
 async def root():
     return {"message": "Image PUSH server is running. POST images to /images/uploadfile/"}
+
+
+if __name__=="__main__":
+    
+    child_controller_pro = Process(target=runworker)
+    
+    try:
+        
+        child_controller_pro.start()
+        
+        uvicorn.run(
+            "main:app",
+            host="127.0.0.1",
+            port=8000,
+            log_level="info",
+            reload=False 
+        )
+        
+    except KeyboardInterrupt:
+        print("Shutting Down from Keyboard Interrupt")
+    finally:
+        if child_controller_pro.is_alive():
+            child_controller_pro.terminate()
+            child_controller_pro.join()
+            
+        print("Closing...")
+        
