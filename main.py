@@ -1,98 +1,93 @@
-import zmq
-import zmq.asyncio
-from fastapi import FastAPI
-from contextlib import asynccontextmanager
-from RequestsHandle import image_router  
-import redis.asyncio as aredis 
+import redis as sredis 
 import redis.exceptions 
-from worker import runworker,Process
-import uvicorn
-import os 
+from worker import worker 
+from multiprocessing import Process
+from flask import Flask, jsonify
+from flask_cors import CORS
+import os
 from dotenv import load_dotenv
-from fastapi.middleware.cors import CORSMiddleware
+from RequestsHandle import routes_bp
+
 load_dotenv()
 
-context = zmq.asyncio.Context()
-
 INFO = bool(os.getenv("INFO"))
+NUM_WORKERS = int(os.getenv("NUM_WORKERS", 1)) 
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    
-    print("FastAPI starting up...")
-    
-    push_socket = context.socket(zmq.PUSH)
-    push_socket.bind("tcp://127.0.0.1:5555")
-    
-    try:
-        redis_con = aredis.Redis(decode_responses=True)
+print("Flask application starting up...")
+
+try:
+
+    redis_con = sredis.Redis(decode_responses=True)
+    redis_con.ping()
+    if INFO:
+        print("[INFO] Connected to Redis at localhost:6379")
         
-        await redis_con.ping()#type:ignore
-    except redis.exceptions.ConnectionError:
-        print("[ERROR] Cant Connect to Redis server!")
-        exit()
-    app.state.zmq_socket = push_socket
-    print("ZMQ PUSH socket bound to tcp://*:5555")
-    app.state.redis_connection = redis_con
-    
-    yield  
-    
-    print("FastAPI shutting down...")
-    app.state.zmq_socket.close()
-    context.term()
-    print("ZMQ socket and FastAPI closed.")
+except redis.exceptions.ConnectionError:
+    print("[ERROR] Cannot connect to Redis server at localhost:6379!")
+    exit(1)
 
-app = FastAPI(lifespan=lifespan)
+app = Flask(__name__)
 
 
+app.config['REDIS_CONNECTION'] = redis_con
+app.config['INFO'] = INFO
+
+####################### CORS CONFIG
 origins = [
-    "http://127.0.0.1:5500",  
+    "http://127.0.0.1:5500",
     "http://localhost:5500",
     "null",
     "http://127.0.0.1:5000",
     "http://172.24.160.1:5000",
-    "http://172.24.160.1:5500" 
+    "http://172.24.160.1:5500",
+    "http://localhost:8000"
 ]
+CORS(app, resources={r"/*": {"origins": origins}}, supports_credentials=True)
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=origins,
-    allow_credentials=True,
-    allow_methods=["*"],  
-    allow_headers=["*"],  
-)
 
-app.include_router(image_router, prefix="/images")
+app.register_blueprint(routes_bp, prefix="/images")
 
-@app.get("/")
-async def root():
-    if INFO:
+@app.route("/")
+def root():
+    """
+    Root Endpoint
+    """
+    if app.config['INFO']:
         print("[INFO] root initiated!")
-    return {"message": "Image PUSH server is running. POST images to /images/uploadfile/"}
-
-
-if __name__=="__main__":
+    return jsonify({
+        "message": "Image2Latex server is running. POST images to /images/uploadfile/"
+    })
     
-    child_controller_pro = Process(target=runworker)
+    
+if __name__=="__main__":
+
+    print(f"[INFO] Starting {NUM_WORKERS} worker processes...")
+    worker_processes = [Process(target=worker, daemon=True) for _ in range(NUM_WORKERS)]
     
     try:
+        for p in worker_processes:
+            p.start()
+        print(f"[INFO] {NUM_WORKERS} worker processes started.")
         
-        child_controller_pro.start()
-        
-        uvicorn.run(
-            "main:app",
+        # gunicorn -w 4 -b 0.0.0.0:8000 flask_main:app
+        app.run(
             host="0.0.0.0",
             port=8000,
-            log_level="info",
-            reload=False 
+            debug=False  
         )
         
     except KeyboardInterrupt:
-        print("Shutting Down from Keyboard Interrupt")
+        print("\n\nShutting Down from Keyboard Interrupt...")
     finally:
-        if child_controller_pro.is_alive():
-            child_controller_pro.terminate()
-            child_controller_pro.join()
-            
-        print("Closing...")
+        print("Terminating worker processes...")
+        for p in worker_processes:
+            if p.is_alive():
+                p.terminate()
+                p.join(timeout=1)
+        print("Worker processes terminated.")
         
+        print("Closing Redis connection...")
+        app.config['REDIS_CONNECTION'].close()
+        
+        print("Flask server shut down.")
+

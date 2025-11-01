@@ -1,99 +1,122 @@
-from fastapi import APIRouter, UploadFile, File, HTTPException , Request
+from flask import Blueprint, request, current_app, abort,jsonify
 import io
 from PIL import Image
 from secrets import token_urlsafe
 import base64
-import zmq 
-import redis.asyncio as aredis
 import redis.exceptions
-from dotenv import load_dotenv
+import redis as sredis
 import os
+from dotenv import load_dotenv
+import zmq
+
 load_dotenv()
 
-image_router = APIRouter()
-INFO = bool(os.getenv("INFO"))
+routes_bp = Blueprint('routes',__name__)
 
-@image_router.post("/uploadfile/", summary="Upload an image file")
-async def upload_image(request:Request , file: UploadFile = File(...)):
+INFO = bool(os.getenv("INFO"))
+ZMQ_WORKER_ADDRESS = "tcp://127.0.0.1:5555"
+
+context = zmq.Context()
+push_socket = context.socket(zmq.PUSH)
+        
+@routes_bp.route("/images/uploadfile/", methods=["POST"])
+def upload_image():
     """
     Receives an image file from the client, stores it in zeromq push queue,
-    and return id.
+    and returns a unique ID.
     """
+    
+    if 'file' not in request.files:
+        abort(400, description="No file part in the request.")
+        
+    file = request.files['file']
+    
+    if file.filename == '':
+        abort(400, description="No selected file.")
+
     if not file.content_type or not file.content_type.startswith("image/"):
-        raise HTTPException(
-            status_code=400,
-            detail="Invalid file type. Only image files are allowed. Use jpg/png."
-        )
+        abort(400, description="Invalid file type. Only image files are allowed (jpg/png).")
 
     try:
-        image_bytes = await file.read()
+        image_bytes = file.read()
 
         try:
-            Image.open(io.BytesIO(image_bytes)).verify() 
+            Image.open(io.BytesIO(image_bytes)).verify()
         except Exception:
-            raise HTTPException(
-            status_code=400,
-            detail="Invalid file type. Only image files are allowed. Use jpg/png."
-        )
+            abort(400, description="Invalid image data. Could not be processed.")
 
         img_uid = token_urlsafe(32)
         
-        payload= {
-                "id": img_uid,
-                "data": base64.b64encode(image_bytes).decode('utf-8')
-            }
+        payload = {
+            "id": img_uid,
+            "data": base64.b64encode(image_bytes).decode('utf-8')
+        }
         
-        push_socket :zmq.Socket= request.app.state.zmq_socket
-        r_con :aredis.Redis = request.app.state.redis_connection
         
-        await push_socket.send_json(payload)#type:ignore
+        push_socket.connect(ZMQ_WORKER_ADDRESS)
+        push_socket.send_json(payload)
+        
+        
+        r_con:sredis.Redis = current_app.config['REDIS_CONNECTION']
+        
+        
         try:
-            await r_con.set(payload["id"],"Pending: ")
+            r_con.set(payload["id"], "Pending: ")
         except redis.exceptions.ConnectionError:
             print("[ERROR] Redis connection Error!")
+            
+        
         if INFO:
             print(f"[INFO] Posted for {img_uid}")
-        return {
-            "s":"ok",
-            "id":img_uid
-        }
-    except Exception as e:
-        print(f"[ERROR] processing image upload: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to process image: {e}")
+        
+        return jsonify({
+            "s": "ok",
+            "id": img_uid
+        })
 
-@image_router.get("/result/{img_uid}",summary="Get reult.")
-async def get_result(img_uid:str ,request:Request):
+    except Exception as e:
+        print("[ERROR] processing image upload: ",e)
+        abort(500, description=f"Failed to process image: {e}")
+
+        
+        
+@routes_bp.route("/images/result/<string:img_uid>", methods=["GET"])
+def get_result(img_uid: str):
     """
-    Hanlde polling and getting back result.!
+    Handle polling and getting back the processing result from Redis.
     """
     try:
-        r_con :aredis.Redis = request.app.state.redis_connection
+        r_con :sredis.Redis= current_app.config['REDIS_CONNECTION']
         
-        result = await r_con.get(img_uid)
+        result = r_con.get(img_uid)
+        
         if result is None:
             #here i think we can add a mechanism for stopping ddos attack!
-            raise HTTPException(status_code=404, detail="Invalid Img_UID!")
+            abort(404, description="Invalid Img_UID!")
         
         code = str(result).split(":",1)
         
         if INFO:
             print(f"[INFO] Got for {img_uid}")
+            
         match code[0]:
             case "Pending":
-                return {"status":"pending"}
+                response = {"status":"pending"}
             case "Result":
-                await r_con.delete(img_uid)
-                return {"status":"done","result":code[-1]}
+                r_con.delete(img_uid)
+                response = {"status":"done","result":code[-1]}
             case "Error":
-                await r_con.delete(img_uid)
-                return {"status":"error","e":code[-1]}
+                r_con.delete(img_uid)
+                response = {"status":"error","e":code[-1]}
             case _:
-                return {"status":"unknown"}
-            
-    except redis.exceptions.ConnectionError as e:
-        print("[ERROR] Redis connection error:",e)
-        raise HTTPException(status_code=500, detail="Redis connection error")
-    except Exception as e:
-        print("[ERROR] Something unexpected went wrong!:",e)
-        raise HTTPException(status_code=500, detail="Internal Server error")
+                response = {"status":"unknown"}
+                
+        return jsonify(response)
     
+    except redis.exceptions.ConnectionError as e:
+        print("[ERROR] Redis connection error:", e)
+        abort(500, description="Redis connection error")
+    except Exception as e:
+        print(f"[ERROR] Something unexpected went wrong with ID {img_uid}: {e}")
+        abort(500, description="Internal Server error")
+        

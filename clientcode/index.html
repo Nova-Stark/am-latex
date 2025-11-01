@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Image to LaTeX</title>
+    <title>Image to LaTeX (Flask Client)</title>
     <style>
         :root {
             --bg-color: #2E2E2E;
@@ -185,19 +185,13 @@
 
     <script>
         // API Configuration
-        //adjust this part 
-        //
-        //
-        //const BASE_URL = "http://127.0.0.1:8000";
-        const BASE_URL = "http://172.24.170.224:8000";
+        // This configuration works for BOTH the FastAPI and Flask servers
+        // as they share the same port and URL structure.
+        const BASE_URL = "http://localhost:8000";
+        //const BASE_URL = "http://172.24.170.224:8000"; // Your original IP
         const UPLOAD_URL = `${BASE_URL}/images/uploadfile/`;
         const RESULT_URL_BASE = `${BASE_URL}/images/result/`;
         const POLL_INTERVAL_MS = 2000; // 2 seconds
-        //
-        //
-        //
-        //
-        //
        
         const dropZone = document.getElementById('drop-zone');
         const fileInput = document.getElementById('file-input');
@@ -325,7 +319,8 @@
 
                 if (!response.ok) {
                     const errData = await response.json();
-                    throw new Error(errData.detail || "Failed to upload file.");
+                    
+                    throw new Error(errData.description || "Failed to upload file.");
                 }
 
                 const data = await response.json();
@@ -352,7 +347,8 @@
                     const response = await fetch(resultUrl);
 
                     if (response.status === 404) {
-                        return;
+                        console.log("Polling: ID not found yet.");
+                        return; // Keep polling
                     }
                     
                     if (!response.ok) {
@@ -362,7 +358,7 @@
                     const data = await response.json();
 
                     if (data.status === "pending") {
-                        return; 
+                        return; // Keep polling
                     }
 
                     clearInterval(intervalId); 
@@ -387,4 +383,3 @@
     </script>
 </body>
 </html>
-

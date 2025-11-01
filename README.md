@@ -1,21 +1,22 @@
 # am-Latex
 
-This is **high performance, scalable , asynchronous backend API system** to convert image to latex code.
-This is built using modern Python stack (FastAPI,ZeroMQ, Redis). 
+This is **high performance, scalable backend API system** to convert image to latex code.
+This is built using modern Python stack (Flask,ZeroMQ, Redis). 
 
 (Note: This software is tightly developed for Linux Systems 
 (Backend needs a *linux* distro that's all!))
-(Also: I have no idea this is will work!! not battle testes *yet*)
+(Also: I have no idea this is will work!! not battle testes *yet*)(now it is partially tested!)
 ## How this works?
 
-This isn't just a simple API; it's a full-on asynchronous worker system. When you're dealing with a "slow" task like running an OCR model, you can't just make the user wait for 5 seconds. The browser will time out, and it's a bad experience.
-You can change the host and ports , even on different machines , fastapi and zeromq can handle those tasks at ease.
+This isn't just a simple API; it's a full-on multiprocess worker system. When you're dealing with a "slow" task like running an OCR model, you can't just make the user wait for 5 seconds. The browser will time out, and it's a bad experience.
+You can change the host and ports , even on different machines , flask and zeromq can handle those tasks at ease.
 
 ***Here's the data flow:*** 
+#### ***For client part you can refer index.html file in clientcode folder or the tester.py . We need json parsing for flask***
 
 1.**Submit (POST)**: A client sends an image to the POST /images/uploadfile/ endpoint.
 
-2.**API (FastAPI)**: The API server doesn't do the work. It validates the image, generates a unique img_uid, and immediately pushes the job (the image and its ID) into a ZeroMQ message queue.
+2.**API (Flask)**: The API server doesn't do the work. It validates the image, generates a unique img_uid, and immediately pushes the job (the image and its ID) into a ZeroMQ message queue.
 
 3.**Instant Response**: The server instantly replies to the client with {"id": "img_uid"}. The client now has a "ticket" for their job.
 
@@ -46,10 +47,10 @@ You can change the host and ports , even on different machines , fastapi and zer
 2. INstall Packages using uv 
 `uv venv`
 `uv init`
-`uv add "fastapi[all]" "pix2tex[api]" python-dotenv pyzmq "redis[hiredis]" uvicorn`
+`uv add "flask" "flask-cors" "pix2tex[api]" python-dotenv pyzmq "redis[hiredis]" uvicorn`
 
 3. You can edit number of workers in .env file
-`NUM_WORKERS=4`
+`NUM_WORKERS=2`
 (Adjust NUM_WORKERS based on your machine's CPU cores and available RAM.)
 
 4. Running the Application:
@@ -61,7 +62,7 @@ run `python main.py`
 
 This single command starts:
 
-->The FastAPI web server on http://127.0.0.1:8000
+->The Flask web server on http://127.0.0.1:8000
 ->The ZMQ PUSH socket
 ->The pool of NUM_WORKERS child processes
 

@@ -7,20 +7,20 @@ import base64
 import zmq 
 import redis as sredis
 import redis.exceptions
-from multiprocessing import Process
-
 load_dotenv()
+
 
 NUM_WORKERS = int(os.getenv("NUM_WORKERS"))#type:ignore
 INFO = bool(os.getenv("INFO"))
+ZMQ_WORKER_ADDRESS = "tcp://127.0.0.1:5555"
 
 def worker():
-    
     context = zmq.Context()
     
     socket = context.socket(zmq.PULL)
-    socket.connect("tcp://localhost:5555")
+    socket.bind(ZMQ_WORKER_ADDRESS)
     model = LatexOCR()
+    
     if INFO:
         print("[INFO] Worker started!")
     try:
@@ -29,8 +29,8 @@ def worker():
         redis_con.ping()
     except redis.exceptions.ConnectionError:
         print("[ERROR] Cant Connect to Redis server!")
-        exit()
-         
+        return
+
     while True:
         try:
             
@@ -53,17 +53,14 @@ def worker():
             except Exception as ex:
                 redis_con.set(img_uid,f"Error:{ex}")
             
-                 
+        except zmq.ZMQError as e:
+            print("[ERROR] Worker: ZMQ Error",e)
+            break         
         except Exception as e:
             print("[ERROR] Unexpected Error while processing image: ",e)
-            
-            
-def runworker():
-    t = [Process(target=worker) for _ in range(NUM_WORKERS)]
-    
-    for i in t:
-        i.start()
         
-    for i in t:
-        i.join()
-        
+    socket.close()
+    context.term()
+    redis_con.close()
+    print("[INFO] Worker shutting down.")
+  
